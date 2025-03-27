@@ -2,7 +2,7 @@ from .base import *
 
 DEBUG = False
 
-ALLOWED_HOST = ["https://mielle.me"]
+ALLOWED_HOST = ['*']
 
 
 # TODO: Update cors configuration before deployment
