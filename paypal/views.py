@@ -98,8 +98,8 @@ def subscribe_to_basic_plan(request):
                     "payer_selected": "PAYPAL",
                     "payee_preferred": "IMMEDIATE_PAYMENT_REQUIRED"
                 },
-                "return_url": f"{app_url}/paypal/subscribe/basic/success",
-                "cancel_url": f"{app_url}/paypal/subscribe/basic/cancel"
+                "return_url": f"https://{app_url}/paypal/subscribe/basic/success",
+                "cancel_url": f"https://{app_url}/paypal/subscribe/basic/cancel"
             }
         }
 
