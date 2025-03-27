@@ -27,11 +27,12 @@ def subscribe_to_basic_plan(request):
         link = user.subscription.subscription_metadata['links'][0]['href']
         return Response({ "message": "Subscription already created, waiting for approval!", "link": link  })
     
+    client_id = os.getenv('PAYPAL_CLIENT_ID')
+    client_secret = os.getenv('PAYPAL_CLIENT_SECRET')
+    print(f'paypal id is {client_id}')
+    print(f'paypal secret is {client_secret}')
     
-    print(f'paypal id is {os.getenv('PAYPAL_CLIENT_ID')}')
-    print(f'paypal secret is {os.getenv('PAYPAL_CLIENT_SECRET')}')
-    
-    credentials = f"{os.getenv('PAYPAL_CLIENT_ID')}:{os.getenv('PAYPAL_CLIENT_SECRET')}".encode("utf-8")
+    credentials = f"{client_id}:{client_secret}".encode("utf-8")
     encoded_credentials = base64.b64encode(credentials).decode("utf-8")
     
     authorization_data = 'grant_type=client_credentials&ignoreCache=true&return_authn_schemes=true&return_client_metadata=true&return_unconsented_scopes=true'
