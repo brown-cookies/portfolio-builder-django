@@ -29,11 +29,45 @@ def subscribe_to_basic_plan(request):
     
     client_id = os.getenv('PAYPAL_CLIENT_ID')
     client_secret = os.getenv('PAYPAL_CLIENT_SECRET')
+    app_url = os.getenv('APP_FRONTEND_URL')
+    
+    if not client_id or not client_secret:
+        print("❌ Missing PayPal credentials")
+        return Response({"error": "PayPal credentials are not set"}, status=500)
+
+    if not app_url:
+        print("❌ Missing APP__FRONTEND_URL")
+        return Response({"error": "APP_URL is not set"}, status=500)
+    
     print(f'paypal id is {client_id}')
     print(f'paypal secret is {client_secret}')
     
-    credentials = f"{client_id}:{client_secret}".encode("utf-8")
-    encoded_credentials = base64.b64encode(credentials).decode("utf-8")
+    try:
+        credentials = f"{client_id}:{client_secret}".encode("utf-8")
+        encoded_credentials = base64.b64encode(credentials).decode("utf-8")
+
+        authorization_headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': f"Basic {encoded_credentials}"
+        }
+        authorization_data = 'grant_type=client_credentials'
+
+        auth_response = requests.post(
+            'https://api-m.sandbox.paypal.com/v1/oauth2/token',
+            headers=authorization_headers,
+            data=authorization_data
+        )
+
+        if auth_response.status_code != 200:
+            print("❌ PayPal Authorization Failed:", auth_response.text)
+            return Response({"error": "Failed to get PayPal token", "details": auth_response.text}, status=500)
+
+        authorization_token = auth_response.json().get('access_token')
+        print(f'✅ PayPal Token: {authorization_token[:10]}...')
+
+    except Exception as e:
+        print("❌ Error in PayPal Authorization:", str(e))
+        return Response({"error": "PayPal authorization failed", "details": str(e)}, status=500)
     
     authorization_data = 'grant_type=client_credentials&ignoreCache=true&return_authn_schemes=true&return_client_metadata=true&return_unconsented_scopes=true'
     authorization_headers = {
@@ -41,68 +75,86 @@ def subscribe_to_basic_plan(request):
         'Authorization': f"Basic {encoded_credentials}"
     }
     
-    authorization_response = requests.request("POST", 'https://api-m.sandbox.paypal.com/v1/oauth2/token', headers=authorization_headers, data=authorization_data)
-    
-    authorization_token = authorization_response.json()['access_token']
-    
     basic_plan = SubscriptionPlan.objects.filter(plan_type="basic").first()
     
     billing_plan_id = basic_plan.paypal_plan_id
-        
-    subscription_data = {
-        "plan_id": billing_plan_id,
-        "start_time": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
-        "shipping_amount": {
-            "currency_code": "USD",
-            "value": int(basic_plan.price)
-        },
-        "subscriber": {
-            "name": {
-                "given_name": user.first_name,
-                "surname": user.last_name
+    
+    try:
+        subscription_data = {
+            "plan_id": billing_plan_id,
+            "start_time": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+            "subscriber": {
+                "name": {
+                    "given_name": user.first_name,
+                    "surname": user.last_name
+                },
+                "email_address": user.email,
             },
-            "email_address": user.email,
-        },
-        "application_context": {
-            "brand_name": "Portfolio Builder",
-            "locale": "en-US",
-            "user_action": "SUBSCRIBE_NOW",
-            "payment_method": {
-                "payer_selected": "PAYPAL",
-                "payee_preferred": "IMMEDIATE_PAYMENT_REQUIRED"
-            },
-        "return_url": f"{os.getenv('APP_URL')}/paypal/subscribe/basic/success",
-        "cancel_url": "https://example.com/cancel"
+            "application_context": {
+                "brand_name": "Portfolio Builder",
+                "locale": "en-US",
+                "user_action": "SUBSCRIBE_NOW",
+                "payment_method": {
+                    "payer_selected": "PAYPAL",
+                    "payee_preferred": "IMMEDIATE_PAYMENT_REQUIRED"
+                },
+                "return_url": f"{app_url}/paypal/subscribe/basic/success",
+                "cancel_url": f"{app_url}/paypal/subscribe/basic/cancel"
+            }
         }
-    }
-    subscription_headers = {
-        'Content-Type': 'application/json',
-        'PayPal-Request-Id': '14ff1f7e-b119-407b-b491-9a4e5fd4d91c',
-        'Prefer': 'return=representation',
-        'Authorization': f'Bearer {authorization_token}'
-    }
-    
-    subscription_response = requests.request("POST", 'https://api-m.sandbox.paypal.com/v1/billing/subscriptions', headers=subscription_headers, data=json.dumps(subscription_data))
-    subscription_response_data = subscription_response.json()
-    
-    subscription_id = subscription_response_data['id']
-    subscription_status = subscription_response_data['status']
-    subscription_start_time = subscription_response_data['start_time']
-    subscription_approve_link = subscription_response_data['links'][0]['href']
-    
-    subscription = Subscription.objects.create(
-        plan=basic_plan,
-        subscription_id = subscription_id,
-        status=subscription_status,
-        subscription_metadata=subscription_response_data,
-        start_date=subscription_start_time
-    )
-    
-    subscription.save()
-    
-    user.subscription = subscription
-    
-    user.save()
+
+        print(f'✅ Sending subscription request to PayPal: {json.dumps(subscription_data, indent=4)}')
+
+        subscription_headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {authorization_token}'
+        }
+
+        subscription_response = requests.post(
+            'https://api-m.sandbox.paypal.com/v1/billing/subscriptions',
+            headers=subscription_headers,
+            json=subscription_data
+        )
+
+        if subscription_response.status_code != 201:
+            print("❌ Subscription Creation Failed:", subscription_response.text)
+            return Response({"error": "Failed to create subscription", "details": subscription_response.text}, status=500)
+
+        subscription_response_data = subscription_response.json()
+
+        subscription_id = subscription_response_data.get('id')
+        subscription_status = subscription_response_data.get('status')
+        subscription_approve_link = next(
+            (link['href'] for link in subscription_response_data.get('links', []) if link['rel'] == 'approve'), None
+        )
+
+        print(f'✅ Subscription Created: ID={subscription_id}, Status={subscription_status}')
+
+        if not subscription_approve_link:
+            print("❌ No approval link found in response!")
+            return Response({"error": "No approval link found"}, status=500)
+
+    except Exception as e:
+        print("❌ Error Creating PayPal Subscription:", str(e))
+        return Response({"error": "PayPal subscription creation failed", "details": str(e)}, status=500)
+        
+    try:
+        subscription = Subscription.objects.create(
+            user=user,
+            plan=basic_plan,
+            subscription_id=subscription_id,
+            status=subscription_status,
+            subscription_metadata=subscription_response_data,
+            start_date=datetime.now(timezone.utc)
+        )
+
+        subscription.save()
+        user.subscription = subscription
+        user.save()
+
+    except Exception as e:
+        print("❌ Database Save Error:", str(e))
+        return Response({"error": "Database save failed", "details": str(e)}, status=500)
     
     return Response({ "message": "Waiting for approval!", "link": subscription_approve_link })
 
