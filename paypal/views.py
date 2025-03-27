@@ -18,12 +18,18 @@ load_dotenv()
 def subscribe_to_basic_plan(request):
     user = request.user
     
+    print(f'the user is {user.username}')
+    
     if user.subscription and user.subscription.status == "ACTIVE":
         return Response({ "message": "User is already subscribed!" })
     
     if user.subscription and user.subscription.status == "APPROVAL_PENDING":
         link = user.subscription.subscription_metadata['links'][0]['href']
         return Response({ "message": "Subscription already created, waiting for approval!", "link": link  })
+    
+    
+    print(f'paypal id is {os.getenv('PAYPAL_CLIENT_ID')}')
+    print(f'paypal secret is {os.getenv('PAYPAL_CLIENT_SECRET')}')
     
     credentials = f"{os.getenv('PAYPAL_CLIENT_ID')}:{os.getenv('PAYPAL_CLIENT_SECRET')}".encode("utf-8")
     encoded_credentials = base64.b64encode(credentials).decode("utf-8")
