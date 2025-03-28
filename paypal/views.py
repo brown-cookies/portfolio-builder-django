@@ -193,7 +193,7 @@ def subscribe_to_basic_plan_on_success(request):
     
     subscription.save()
     
-    return redirect(f"{os.getenv('APP_FRONTEND_URL')}/dashboard")
+    return redirect("https://portfolio-builder-react.vercel.app/dashboard")
 
 @api_view(["GET"])
 def subscribe_to_basic_plan_on_error(request):
