@@ -29,7 +29,7 @@ def subscribe_to_basic_plan(request):
     
     client_id = os.getenv('PAYPAL_CLIENT_ID')
     client_secret = os.getenv('PAYPAL_CLIENT_SECRET')
-    app_url = os.getenv('APP_FRONTEND_URL')
+    app_url = os.getenv('APP_URL')
     
     if not client_id or not client_secret:
         print("❌ Missing PayPal credentials")
@@ -98,8 +98,8 @@ def subscribe_to_basic_plan(request):
                     "payer_selected": "PAYPAL",
                     "payee_preferred": "IMMEDIATE_PAYMENT_REQUIRED"
                 },
-                "return_url": f"https://{app_url}/paypal/subscribe/basic/success",
-                "cancel_url": f"https://{app_url}/paypal/subscribe/basic/cancel"
+                "return_url": f"https://portfolio-builder-dj-2457a65d65d7.herokuapp.com/paypal/subscribe/basic/success",
+                "cancel_url": f"https://portfolio-builder-dj-2457a65d65d7.herokuapp.com/paypal/subscribe/basic/cancel"
             }
         }
 
